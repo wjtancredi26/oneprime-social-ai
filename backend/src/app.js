@@ -14,7 +14,7 @@ import publishRoutes from "./routes/publishRoutes.js";
 import metaAuthRoutes from "./routes/metaAuthRoutes.js";
 import { buildPremiumImagePrompt } from "./services/creativePromptService.js";
 
-dotenv.config({ override: true });
+dotenv.config();
 
 const app = express();
 const prisma = new PrismaClient();
