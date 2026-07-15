@@ -1,6 +1,6 @@
--- AlterTable
-ALTER TABLE "ScheduledPost" ADD COLUMN     "attempts" INTEGER NOT NULL DEFAULT 0,
-ADD COLUMN     "facebookPostId" TEXT,
-ADD COLUMN     "instagramPostId" TEXT,
-ADD COLUMN     "lastError" TEXT,
-ADD COLUMN     "publishedAt" TIMESTAMP(3);
+ALTER TABLE "ScheduledPost"
+ADD COLUMN IF NOT EXISTS "publishedAt" TIMESTAMP(3),
+ADD COLUMN IF NOT EXISTS "attempts" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN IF NOT EXISTS "lastError" TEXT,
+ADD COLUMN IF NOT EXISTS "facebookPostId" TEXT,
+ADD COLUMN IF NOT EXISTS "instagramPostId" TEXT;
