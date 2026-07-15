@@ -1,3 +1,4 @@
+import { getMetaConnection } from "./metaConnectionStore.js";
 function isPublicHttpUrl(value) {
   if (!value || typeof value !== "string" || value.trim() === "") {
     return false;
@@ -16,15 +17,35 @@ function sleep(ms) {
 }
 
 function assertMetaConfig() {
-  const pageId = process.env.META_PAGE_ID;
-  const pageAccessToken = process.env.META_PAGE_ACCESS_TOKEN;
-  const graphVersion = process.env.META_GRAPH_VERSION || "v25.0";
+  const connection = getMetaConnection();
+
+  const pageId =
+    connection?.pageId ||
+    process.env.META_PAGE_ID;
+
+  const pageAccessToken =
+    connection?.pageAccessToken ||
+    process.env.META_PAGE_ACCESS_TOKEN;
+
+  const igUserId =
+    connection?.igUserId ||
+    process.env.META_IG_USER_ID;
+
+  const graphVersion =
+    process.env.META_GRAPH_VERSION || "v25.0";
 
   if (!pageId || !pageAccessToken) {
-    throw new Error("META_PAGE_ID ou META_PAGE_ACCESS_TOKEN não configurado no .env.");
+    throw new Error(
+      "Meta não conectada. Conecte novamente o Facebook e o Instagram."
+    );
   }
 
-  return { pageId, pageAccessToken, graphVersion };
+  return {
+    pageId,
+    pageAccessToken,
+    igUserId,
+    graphVersion,
+  };
 }
 
 async function postToGraph(endpoint, body) {
@@ -114,10 +135,11 @@ export async function publishFacebookPost({ message, imageUrl }) {
 }
 
 export async function publishInstagramPost({ caption, imageUrl }) {
-  const igUserId = process.env.META_IG_USER_ID;
-  const pageAccessToken = process.env.META_PAGE_ACCESS_TOKEN;
-  const graphVersion = process.env.META_GRAPH_VERSION || "v25.0";
-
+ const {
+  igUserId,
+  pageAccessToken,
+  graphVersion,
+} = assertMetaConfig();
   if (!igUserId || !pageAccessToken) {
     throw new Error("META_IG_USER_ID ou META_PAGE_ACCESS_TOKEN não configurado no .env.");
   }

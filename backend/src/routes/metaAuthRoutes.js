@@ -15,7 +15,14 @@ router.get("/status", (req, res) => {
   res.json({
     success: true,
     connected: Boolean(connection),
-    connection,
+    connection: connection
+      ? {
+          pageId: connection.pageId,
+          pageName: connection.pageName,
+          igUserId: connection.igUserId,
+          connectedAt: connection.connectedAt,
+        }
+      : null,
   });
 });
 
@@ -106,8 +113,11 @@ router.get("/callback", async (req, res) => {
       connectedAt: new Date().toISOString(),
     });
 
-    console.log("META CONECTADA:", connection);
-
+    console.log("META CONECTADA:", {
+  pageId: connection.pageId,
+  pageName: connection.pageName,
+  igUserId: connection.igUserId,
+});
     return res.redirect(`${frontendUrl}?meta=connected`);
   } catch (error) {
     console.error("ERRO CALLBACK META:", error);
