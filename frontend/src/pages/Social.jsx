@@ -19,7 +19,11 @@ export default function Social() {
   }
 
   function connectMeta() {
-    window.location.href = "http://127.0.0.1:3001/api/meta/connect";
+   const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "https://carefree-patience-production.up.railway.app";
+
+window.location.href = `${API_URL}/api/meta/connect`;
   }
 
   async function disconnectMeta() {

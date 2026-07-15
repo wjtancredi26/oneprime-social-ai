@@ -4,8 +4,9 @@ import { createPost } from "../services/postsService";
 import { publishPostNow } from "../services/publishService";
 import parseAIResponse from "../utils/parseAIResponse";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
-
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "https://carefree-patience-production.up.railway.app";
 export default function Creator() {
   const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState(null);

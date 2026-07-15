@@ -1,10 +1,27 @@
-import axios from "axios";
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "https://carefree-patience-production.up.railway.app";
 
-const api = axios.create({
-  baseURL: "http://127.0.0.1:3001/api",
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
+export async function apiRequest(path, options = {}) {
+  const response = await fetch(`${API_URL}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+  });
 
-export default api;
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      data?.error ||
+        data?.message ||
+        `Erro na API: ${response.status}`
+    );
+  }
+
+  return data;
+}
+
+export default API_URL;
