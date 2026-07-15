@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import OpenAI from "openai";
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcrypt";
 import path from "path";
 
 import mediaRoutes from "./routes/mediaRoutes.js";
@@ -19,7 +20,31 @@ dotenv.config();
 const app = express();
 const prisma = new PrismaClient();
 
-app.use(cors());
+const configuredOrigins = (process.env.FRONTEND_URL || "")
+  .split(",")
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || configuredOrigins.length === 0) {
+        return callback(null, true);
+      }
+
+      const normalizedOrigin = origin.replace(/\/$/, "");
+      const isAllowed =
+        configuredOrigins.includes(normalizedOrigin) ||
+        normalizedOrigin.endsWith(".vercel.app");
+
+      return callback(
+        isAllowed ? null : new Error("Origem não permitida pelo CORS."),
+        isAllowed
+      );
+    },
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use("/uploads", express.static(path.resolve("uploads")));
@@ -53,6 +78,7 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiChatRoutes);
 app.use("/api/companies", companyRoutes);
 app.use("/api/publish", publishRoutes);
@@ -68,9 +94,9 @@ async function getDefaultUser() {
   if (!user) {
     user = await prisma.user.create({
       data: {
-        name: "Wilian",
-        email: "wilian@oneprimeseg.com.br",
-        password: "123456",
+        name: process.env.ADMIN_NAME || "Wilian",
+        email: process.env.ADMIN_EMAIL || "wilian@oneprimeseg.com.br",
+        password: await bcrypt.hash(process.env.ADMIN_PASSWORD || "123456", 10),
         role: "ADMIN",
       },
     });

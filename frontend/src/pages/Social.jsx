@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import api from "../services/api";
+import api, { API_ORIGIN } from "../services/api";
 
 export default function Social() {
   const [loading, setLoading] = useState(false);
@@ -19,11 +19,7 @@ export default function Social() {
   }
 
   function connectMeta() {
-   const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "https://carefree-patience-production.up.railway.app";
-
-window.location.href = `${API_URL}/api/meta/connect`;
+    window.location.href = `${API_ORIGIN}/api/meta/connect`;
   }
 
   async function disconnectMeta() {

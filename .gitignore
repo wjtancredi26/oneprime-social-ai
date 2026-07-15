@@ -1,8 +1,10 @@
 node_modules/
-dist/
 .env
-.vscode/
-.DS_Store
-coverage/
+backend/.env
+frontend/.env
+uploads/
+backend/uploads/
 *.log
-.env
+.DS_Store
+dist/
+.vercel/

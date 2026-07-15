@@ -1,0 +1,20 @@
+{
+  "name": "oneprime-social-ai",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "docker compose up --build",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "db:migrate": "npm --prefix backend run prisma:migrate",
+    "db:generate": "npm --prefix backend run prisma:generate"
+  },
+  "dependencies": {
+    "multer": "^2.2.0",
+    "uuid": "^14.0.1"
+  }
+}

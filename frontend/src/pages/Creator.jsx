@@ -3,10 +3,7 @@ import { generateContent, generateImage } from "../services/aiService";
 import { createPost } from "../services/postsService";
 import { publishPostNow } from "../services/publishService";
 import parseAIResponse from "../utils/parseAIResponse";
-
-const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "https://carefree-patience-production.up.railway.app";
+import { API_ORIGIN } from "../services/api";
 export default function Creator() {
   const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState(null);
@@ -47,7 +44,7 @@ export default function Creator() {
     const formData = new FormData();
     formData.append("image", file);
 
-    const uploadResponse = await fetch(`${API_URL}/media/upload-image`, {
+    const uploadResponse = await fetch(`${API_ORIGIN}/api/media/upload-image`, {
       method: "POST",
       body: formData,
     });
