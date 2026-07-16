@@ -14,3 +14,8 @@ export async function removePost(id) {
   const { data } = await api.delete(`/posts/${id}`);
   return data;
 }
+
+export async function retryPost(id) {
+  const { data } = await api.post(`/publish/post/${id}/retry`);
+  return data;
+}
