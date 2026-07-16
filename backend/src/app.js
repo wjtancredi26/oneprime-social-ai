@@ -13,6 +13,7 @@ import aiChatRoutes from "./routes/aiChatRoutes.js";
 import companyRoutes from "./routes/companyRoutes.js";
 import publishRoutes from "./routes/publishRoutes.js";
 import metaAuthRoutes from "./routes/metaAuthRoutes.js";
+import dashboardRoutes from "./routes/dashboardRoutes.js";
 import { buildPremiumImagePrompt } from "./services/creativePromptService.js";
 
 dotenv.config();
@@ -81,6 +82,7 @@ app.use("/auth", authRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiChatRoutes);
 app.use("/api/companies", companyRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/publish", publishRoutes);
 app.use("/api/media", mediaRoutes);
 app.use("/api/meta", metaAuthRoutes);
