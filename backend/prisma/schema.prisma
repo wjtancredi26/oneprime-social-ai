@@ -27,8 +27,9 @@ model Company {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @default(now()) @updatedAt
 
-  users User[]
-  posts ScheduledPost[]
+  users             User[]
+  posts             ScheduledPost[]
+  socialConnections SocialConnection[]
 }
 
 model User {
@@ -80,4 +81,30 @@ model ScheduledPost {
 
   companyId    Int?
   company      Company? @relation(fields: [companyId], references: [id])
+}
+
+model SocialConnection {
+  id                        Int      @id @default(autoincrement())
+  companyId                 Int
+  provider                  String   @default("META")
+
+  facebookPageId            String
+  facebookPageName          String
+  instagramUserId           String?
+  instagramUsername         String?
+
+  pageAccessTokenEncrypted  String   @db.Text
+  userAccessTokenEncrypted  String?  @db.Text
+  tokenExpiresAt            DateTime?
+
+  status                    String   @default("CONNECTED")
+  lastError                 String?  @db.Text
+  connectedAt               DateTime @default(now())
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, provider])
+  @@index([companyId])
 }

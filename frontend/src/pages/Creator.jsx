@@ -1,11 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { generateContent, generateImage } from "../services/aiService";
 import { createPost } from "../services/postsService";
 import { publishPostNow } from "../services/publishService";
 import parseAIResponse from "../utils/parseAIResponse";
 import { API_ORIGIN } from "../services/api";
+import { getCompanies } from "../services/companyService";
 export default function Creator() {
   const [prompt, setPrompt] = useState("");
+  const [companies, setCompanies] = useState([]);
+  const [companyId, setCompanyId] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -127,7 +130,10 @@ ${result?.cta || ""}`.trim();
       const finalImageUrl = await uploadGeneratedImageIfNeeded(imageResult);
       const message = buildMessage();
 
+      if (!companyId) throw new Error("Selecione a empresa antes de publicar.");
+
       const data = await publishPostNow({
+        companyId: Number(companyId),
         message,
         imageUrl: finalImageUrl,
         network: scheduleNetwork,
@@ -152,10 +158,13 @@ ${result?.cta || ""}`.trim();
     }
 
     try {
-      const scheduledAt = `${scheduleDate}T${scheduleTime}:00`;
+      if (!companyId) throw new Error("Selecione a empresa antes de agendar.");
+
+      const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}:00`).toISOString();
       const finalImageUrl = await uploadGeneratedImageIfNeeded(imageResult);
 
       const data = await createPost({
+        companyId: Number(companyId),
         prompt,
         caption: result?.legenda || "",
         hashtags: result?.hashtags || "",
@@ -178,10 +187,31 @@ ${result?.cta || ""}`.trim();
     }
   }
 
+  useEffect(() => {
+    getCompanies()
+      .then((items) => {
+        setCompanies(items);
+        if (items[0]) setCompanyId(String(items[0].id));
+      })
+      .catch((error) => console.error("Erro ao carregar empresas:", error));
+  }, []);
+
   return (
     <section className="panel">
       <h2>🤖 Criador de Conteúdo IA</h2>
       <p>Descreva o que deseja postar hoje.</p>
+
+      <label>
+        <strong>Empresa</strong>
+        <select value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+          <option value="">Selecione uma empresa</option>
+          {companies.map((company) => (
+            <option key={company.id} value={company.id}>
+              {company.name}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <textarea
         value={prompt}

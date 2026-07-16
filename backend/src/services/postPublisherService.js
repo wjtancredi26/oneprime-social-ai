@@ -14,6 +14,7 @@ ${post.cta || ""}`.trim();
 
   if (post.network.includes("Facebook")) {
     result.facebook = await publishFacebookPost({
+      companyId: post.companyId,
       message,
       imageUrl: post.imageUrl,
     });
@@ -21,6 +22,7 @@ ${post.cta || ""}`.trim();
 
   if (post.network.includes("Instagram")) {
     result.instagram = await publishInstagramPost({
+      companyId: post.companyId,
       caption: message,
       imageUrl: post.imageUrl,
     });

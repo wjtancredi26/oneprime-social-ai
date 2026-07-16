@@ -21,6 +21,7 @@ export const authenticate = async (req, res, next) => {
         name: true,
         email: true,
         role: true,
+        companyId: true,
         createdAt: true,
       },
     });

@@ -1,8 +1,10 @@
-import { getMetaConnection } from "./metaConnectionStore.js";
+import {
+  getMetaConnection,
+  setMetaConnectionError,
+} from "./socialConnectionService.js";
+
 function isPublicHttpUrl(value) {
-  if (!value || typeof value !== "string" || value.trim() === "") {
-    return false;
-  }
+  if (!value || typeof value !== "string" || value.trim() === "") return false;
 
   try {
     const url = new URL(value);
@@ -16,164 +18,166 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function assertMetaConfig() {
-  const connection = getMetaConnection();
+async function assertMetaConfig(companyId) {
+  if (!companyId) {
+    throw new Error("Empresa não informada para publicar na Meta.");
+  }
 
-  const pageId =
-    connection?.pageId ||
-    process.env.META_PAGE_ID;
+  const connection = await getMetaConnection(companyId, { includeSecrets: true });
 
-  const pageAccessToken =
-    connection?.pageAccessToken ||
-    process.env.META_PAGE_ACCESS_TOKEN;
-
-  const igUserId =
-    connection?.igUserId ||
-    process.env.META_IG_USER_ID;
-
-  const graphVersion =
-    process.env.META_GRAPH_VERSION || "v25.0";
-
-  if (!pageId || !pageAccessToken) {
+  if (!connection || connection.status !== "CONNECTED") {
     throw new Error(
-      "Meta não conectada. Conecte novamente o Facebook e o Instagram."
+      "Facebook e Instagram não estão conectados para esta empresa. Acesse Redes Sociais e conecte a Meta."
     );
   }
 
+  if (!connection.facebookPageId || !connection.pageAccessToken) {
+    throw new Error("A conexão Meta desta empresa está incompleta.");
+  }
+
+  if (connection.tokenExpiresAt && new Date(connection.tokenExpiresAt) <= new Date()) {
+    throw new Error("A conexão Meta expirou. Reconecte o Facebook e o Instagram.");
+  }
+
   return {
-    pageId,
-    pageAccessToken,
-    igUserId,
-    graphVersion,
+    pageId: connection.facebookPageId,
+    pageAccessToken: connection.pageAccessToken,
+    igUserId: connection.instagramUserId,
+    graphVersion: process.env.META_GRAPH_VERSION || "v25.0",
   };
 }
 
-async function postToGraph(endpoint, body) {
+async function graphRequest(endpoint, { method = "GET", body } = {}) {
   const response = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
   });
-
-  const data = await response.json();
-
-  console.log("RESPOSTA META:", JSON.stringify(data, null, 2));
+  const data = await response.json().catch(() => ({}));
 
   if (!response.ok || data.error) {
-    throw new Error(data.error?.message || "Erro ao publicar na Meta.");
-  }
-
-  return data;
-}
-
-async function getFromGraph(endpoint) {
-  const response = await fetch(endpoint);
-  const data = await response.json();
-
-  console.log("STATUS INSTAGRAM:", JSON.stringify(data, null, 2));
-
-  if (!response.ok || data.error) {
-    throw new Error(data.error?.message || "Erro ao consultar status do Instagram.");
+    const error = new Error(data.error?.message || "Erro na API da Meta.");
+    error.metaCode = data.error?.code;
+    error.metaSubcode = data.error?.error_subcode;
+    throw error;
   }
 
   return data;
 }
 
 async function waitInstagramContainerReady({ containerId, accessToken, graphVersion }) {
-  const maxAttempts = 10;
+  const maxAttempts = 12;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     await sleep(3000);
 
-    const statusEndpoint =
-      `https://graph.facebook.com/${graphVersion}/${containerId}` +
-      `?fields=status_code,status` +
-      `&access_token=${accessToken}`;
+    const statusUrl = new URL(
+      `https://graph.facebook.com/${graphVersion}/${containerId}`
+    );
+    statusUrl.searchParams.set("fields", "status_code,status");
+    statusUrl.searchParams.set("access_token", accessToken);
 
-    const status = await getFromGraph(statusEndpoint);
+    const status = await graphRequest(statusUrl);
 
-    if (status.status_code === "FINISHED") {
-      return true;
-    }
-
+    if (status.status_code === "FINISHED") return;
     if (status.status_code === "ERROR") {
       throw new Error(status.status || "Erro ao processar mídia no Instagram.");
     }
 
-    console.log(`Aguardando Instagram processar mídia... tentativa ${attempt}/${maxAttempts}`);
-  }
-
-  throw new Error("Instagram demorou para processar a mídia. Tente novamente.");
-}
-
-export async function publishFacebookPost({ message, imageUrl }) {
-  const { pageId, pageAccessToken, graphVersion } = assertMetaConfig();
-
-  if (!message || message.trim() === "") {
-    throw new Error("Mensagem obrigatória para publicar no Facebook.");
-  }
-
-  const hasImage = Boolean(imageUrl && imageUrl.trim() !== "");
-
-  if (hasImage && !isPublicHttpUrl(imageUrl)) {
-    throw new Error(
-      `imageUrl inválida para a Meta: ${imageUrl.substring(0, 80)}. A imagem precisa estar em uma URL pública http/https.`
+    console.log(
+      `Aguardando o Instagram processar a mídia: ${attempt}/${maxAttempts}`
     );
   }
 
-  const endpoint = hasImage
-    ? `https://graph.facebook.com/${graphVersion}/${pageId}/photos`
-    : `https://graph.facebook.com/${graphVersion}/${pageId}/feed`;
-
-  const body = hasImage
-    ? { url: imageUrl, caption: message, access_token: pageAccessToken }
-    : { message, access_token: pageAccessToken };
-
-  console.log("PUBLICANDO NO FACEBOOK:", { endpoint, hasImage, imageUrl });
-
-  return postToGraph(endpoint, body);
+  throw new Error("O Instagram demorou para processar a imagem. Tente novamente.");
 }
 
-export async function publishInstagramPost({ caption, imageUrl }) {
- const {
-  igUserId,
-  pageAccessToken,
-  graphVersion,
-} = assertMetaConfig();
-  if (!igUserId || !pageAccessToken) {
-    throw new Error("META_IG_USER_ID ou META_PAGE_ACCESS_TOKEN não configurado no .env.");
+export async function publishFacebookPost({ companyId, message, imageUrl }) {
+  try {
+    const { pageId, pageAccessToken, graphVersion } = await assertMetaConfig(companyId);
+
+    if (!message?.trim()) {
+      throw new Error("Mensagem obrigatória para publicar no Facebook.");
+    }
+
+    const hasImage = Boolean(imageUrl?.trim());
+
+    if (hasImage && !isPublicHttpUrl(imageUrl)) {
+      throw new Error("A imagem precisa estar em uma URL pública HTTP/HTTPS.");
+    }
+
+    const endpoint = hasImage
+      ? `https://graph.facebook.com/${graphVersion}/${pageId}/photos`
+      : `https://graph.facebook.com/${graphVersion}/${pageId}/feed`;
+
+    return await graphRequest(endpoint, {
+      method: "POST",
+      body: hasImage
+        ? { url: imageUrl, caption: message, access_token: pageAccessToken }
+        : { message, access_token: pageAccessToken },
+    });
+  } catch (error) {
+    if (companyId) await setMetaConnectionError(companyId, error.message, {
+      reconnectRequired: [190, 200].includes(error.metaCode),
+    }).catch(() => {});
+    throw error;
   }
+}
 
-  if (!caption || caption.trim() === "") {
-    throw new Error("Legenda obrigatória para publicar no Instagram.");
+export async function publishInstagramPost({ companyId, caption, imageUrl }) {
+  try {
+    const { igUserId, pageAccessToken, graphVersion } = await assertMetaConfig(companyId);
+
+    if (!igUserId) {
+      throw new Error(
+        "Nenhuma conta profissional do Instagram está conectada à Página desta empresa."
+      );
+    }
+
+    if (!caption?.trim()) {
+      throw new Error("Legenda obrigatória para publicar no Instagram.");
+    }
+
+    if (!isPublicHttpUrl(imageUrl)) {
+      throw new Error("O Instagram exige uma imagem em URL pública HTTP/HTTPS.");
+    }
+
+    const container = await graphRequest(
+      `https://graph.facebook.com/${graphVersion}/${igUserId}/media`,
+      {
+        method: "POST",
+        body: {
+          image_url: imageUrl,
+          caption,
+          access_token: pageAccessToken,
+        },
+      }
+    );
+
+    if (!container.id) {
+      throw new Error("A Meta não retornou o container do Instagram.");
+    }
+
+    await waitInstagramContainerReady({
+      containerId: container.id,
+      accessToken: pageAccessToken,
+      graphVersion,
+    });
+
+    return await graphRequest(
+      `https://graph.facebook.com/${graphVersion}/${igUserId}/media_publish`,
+      {
+        method: "POST",
+        body: {
+          creation_id: container.id,
+          access_token: pageAccessToken,
+        },
+      }
+    );
+  } catch (error) {
+    if (companyId) await setMetaConnectionError(companyId, error.message, {
+      reconnectRequired: [190, 200].includes(error.metaCode),
+    }).catch(() => {});
+    throw error;
   }
-
-  if (!isPublicHttpUrl(imageUrl)) {
-    throw new Error("Para publicar no Instagram, imageUrl precisa ser uma URL pública http/https.");
-  }
-
-  const createContainerEndpoint = `https://graph.facebook.com/${graphVersion}/${igUserId}/media`;
-
-  const container = await postToGraph(createContainerEndpoint, {
-    image_url: imageUrl,
-    caption,
-    access_token: pageAccessToken,
-  });
-
-  if (!container.id) {
-    throw new Error("A Meta não retornou o container do Instagram.");
-  }
-
-  await waitInstagramContainerReady({
-    containerId: container.id,
-    accessToken: pageAccessToken,
-    graphVersion,
-  });
-
-  const publishEndpoint = `https://graph.facebook.com/${graphVersion}/${igUserId}/media_publish`;
-
-  return postToGraph(publishEndpoint, {
-    creation_id: container.id,
-    access_token: pageAccessToken,
-  });
 }
