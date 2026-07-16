@@ -26,24 +26,68 @@ const configuredOrigins = (process.env.FRONTEND_URL || "")
   .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
+const productionFrontend =
+  "https://oneprime-social-ai-frontend-8fqs.vercel.app";
+
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || configuredOrigins.length === 0) {
+      // Permite requisições internas, Postman e acesso direto.
+      if (!origin) {
         return callback(null, true);
       }
 
-      const normalizedOrigin = origin.replace(/\/$/, "");
-      const isAllowed =
-        configuredOrigins.includes(normalizedOrigin) ||
-        normalizedOrigin.endsWith(".vercel.app");
+      const normalizedOrigin = origin
+        .trim()
+        .replace(/\/$/, "");
 
-      return callback(
-        isAllowed ? null : new Error("Origem não permitida pelo CORS."),
-        isAllowed
-      );
+      const isConfiguredOrigin =
+        configuredOrigins.includes(normalizedOrigin);
+
+      const isProductionFrontend =
+        normalizedOrigin === productionFrontend;
+
+      const isVercelDeployment =
+        /^https:\/\/[a-z0-9-]+\.vercel\.app$/i.test(
+          normalizedOrigin
+        );
+
+      const isLocalDevelopment =
+        normalizedOrigin === "http://localhost:5173" ||
+        normalizedOrigin === "http://127.0.0.1:5173";
+
+      const isAllowed =
+        isConfiguredOrigin ||
+        isProductionFrontend ||
+        isVercelDeployment ||
+        isLocalDevelopment;
+
+      if (!isAllowed) {
+        console.warn(
+          "Origem bloqueada pelo CORS:",
+          normalizedOrigin
+        );
+
+        return callback(
+          new Error("Origem não permitida pelo CORS.")
+        );
+      }
+
+      return callback(null, true);
     },
     credentials: true,
+    methods: [
+      "GET",
+      "POST",
+      "PUT",
+      "PATCH",
+      "DELETE",
+      "OPTIONS",
+    ],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+    ],
   })
 );
 app.use(express.json({ limit: "50mb" }));
