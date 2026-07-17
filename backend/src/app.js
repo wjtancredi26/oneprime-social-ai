@@ -373,5 +373,5 @@ app.delete("/api/posts/:id", async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-console.log("ONEPRIME BUILD dd61870 - DASHBOARD ATIVO");
+console.log("ONEPRIME BUILD 506505a - DASHBOARD ATIVO");
 export default app; 
