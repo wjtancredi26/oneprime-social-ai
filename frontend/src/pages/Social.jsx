@@ -1,35 +1,100 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "../services/api";
 import { getCompanies } from "../services/companyService";
+
+function formatDate(value) {
+  if (!value) return "Não informado";
+
+  return new Date(value).toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    dateStyle: "short",
+    timeStyle: "short",
+  });
+}
+
+function isMetaConfigurationError(message = "") {
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes("meta_app_id") ||
+    normalized.includes("meta_app_secret") ||
+    normalized.includes("app id") ||
+    normalized.includes("id do app") ||
+    normalized.includes("não configurado")
+  );
+}
 
 export default function Social() {
   const [loading, setLoading] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+
   const [connection, setConnection] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [companyId, setCompanyId] = useState("");
+
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState("");
+
+  const selectedCompany = useMemo(
+    () =>
+      companies.find(
+        (company) => String(company.id) === String(companyId)
+      ) || null,
+    [companies, companyId]
+  );
+
+  const facebookConnected = Boolean(
+    connection?.status === "CONNECTED" &&
+      connection?.facebookPageId
+  );
+
+  const instagramConnected = Boolean(
+    connection?.status === "CONNECTED" &&
+      connection?.instagramUserId
+  );
+
+  function showMessage(text, type = "info") {
+    setMessage(text || "");
+    setMessageType(type);
+  }
 
   async function loadCompanies() {
     const items = await getCompanies();
-    setCompanies(items);
-    if (!companyId && items[0]) setCompanyId(String(items[0].id));
+    const companiesList = Array.isArray(items) ? items : [];
+
+    setCompanies(companiesList);
+
+    if (!companyId && companiesList[0]) {
+      setCompanyId(String(companiesList[0].id));
+    }
   }
 
   async function loadStatus(selectedCompanyId = companyId) {
-    if (!selectedCompanyId) return;
+    if (!selectedCompanyId) {
+      setConnection(null);
+      return;
+    }
 
     setLoading(true);
     setMessage("");
 
     try {
       const { data } = await api.get("/meta/status", {
-        params: { companyId: selectedCompanyId },
+        params: {
+          companyId: Number(selectedCompanyId),
+        },
       });
+
       setConnection(data.connection || null);
     } catch (error) {
       setConnection(null);
-      setMessage(error.message);
+
+      showMessage(
+        error.message ||
+          "Não foi possível verificar a conexão com a Meta.",
+        "error"
+      );
     } finally {
       setLoading(false);
     }
@@ -37,7 +102,10 @@ export default function Social() {
 
   async function connectMeta() {
     if (!companyId) {
-      setMessage("Selecione uma empresa antes de conectar.");
+      showMessage(
+        "Selecione uma empresa antes de conectar as redes sociais.",
+        "warning"
+      );
       return;
     }
 
@@ -48,102 +116,376 @@ export default function Social() {
       const { data } = await api.post("/meta/connect-url", {
         companyId: Number(companyId),
       });
-      window.location.href = data.url;
+
+      if (!data?.url) {
+        throw new Error(
+          "O servidor não retornou a URL de conexão da Meta."
+        );
+      }
+
+      window.location.assign(data.url);
     } catch (error) {
-      setMessage(error.message);
+      const errorMessage =
+        error.message ||
+        "Não foi possível iniciar a conexão com a Meta.";
+
+      if (isMetaConfigurationError(errorMessage)) {
+        showMessage(
+          "O aplicativo da Meta ainda não está configurado. Assim que o Meta App ID e o Meta App Secret forem cadastrados no Railway, este botão abrirá o login oficial do Facebook e Instagram.",
+          "warning"
+        );
+      } else {
+        showMessage(errorMessage, "error");
+      }
+
       setConnecting(false);
     }
   }
 
   async function disconnectMeta() {
-    if (!window.confirm("Deseja desconectar Facebook e Instagram desta empresa?")) {
-      return;
-    }
+    if (!companyId) return;
+
+    const confirmed = window.confirm(
+      `Deseja desconectar o Facebook e o Instagram de ${
+        selectedCompany?.name || "esta empresa"
+      }?`
+    );
+
+    if (!confirmed) return;
+
+    setDisconnecting(true);
+    setMessage("");
 
     try {
       await api.delete("/meta/disconnect", {
-        data: { companyId: Number(companyId) },
+        data: {
+          companyId: Number(companyId),
+        },
       });
+
       setConnection(null);
-      setMessage("Redes sociais desconectadas.");
+
+      showMessage(
+        "Facebook e Instagram foram desconectados desta empresa.",
+        "success"
+      );
     } catch (error) {
-      setMessage(error.message);
+      showMessage(
+        error.message ||
+          "Não foi possível desconectar as redes sociais.",
+        "error"
+      );
+    } finally {
+      setDisconnecting(false);
     }
   }
 
   useEffect(() => {
-    loadCompanies().catch((error) => setMessage(error.message));
+    loadCompanies().catch((error) => {
+      showMessage(
+        error.message || "Não foi possível carregar as empresas.",
+        "error"
+      );
+    });
   }, []);
 
   useEffect(() => {
-    if (companyId) loadStatus(companyId);
+    if (companyId) {
+      loadStatus(companyId);
+    } else {
+      setConnection(null);
+    }
   }, [companyId]);
 
   return (
-    <section className="panel">
-      <h2>📲 Redes Sociais</h2>
-      <p>
-        Cada empresa conecta sua própria Página do Facebook e o Instagram
-        profissional vinculado.
-      </p>
+    <section className="social-page">
+      <header className="social-page-header">
+        <div>
+          <span className="badge">Integração Meta</span>
 
-      <div className="result-box">
-        <label>
-          <strong>Empresa</strong>
-          <select
-            value={companyId}
-            onChange={(event) => setCompanyId(event.target.value)}
-          >
-            <option value="">Selecione uma empresa</option>
-            {companies.map((company) => (
-              <option key={company.id} value={company.id}>
-                {company.name}
-              </option>
-            ))}
-          </select>
+          <h1>Redes Sociais</h1>
+
+          <p>
+            Conecte o Facebook e o Instagram profissional de cada
+            empresa para publicar agora ou agendar conteúdos.
+          </p>
+        </div>
+
+        <button
+          className="secondary"
+          onClick={() => loadStatus(companyId)}
+          disabled={!companyId || loading}
+        >
+          {loading ? "Atualizando..." : "Atualizar conexão"}
+        </button>
+      </header>
+
+      <section className="social-company-selector">
+        <label htmlFor="social-company">
+          Empresa
         </label>
 
-        <h2>Meta Business</h2>
+        <select
+          id="social-company"
+          value={companyId}
+          onChange={(event) => {
+            setCompanyId(event.target.value);
+            setMessage("");
+          }}
+        >
+          <option value="">Selecione uma empresa</option>
 
-        {message && <p>{message}</p>}
+          {companies.map((company) => (
+            <option key={company.id} value={company.id}>
+              {company.name}
+            </option>
+          ))}
+        </select>
 
-        {loading ? (
-          <p>Carregando conexão...</p>
-        ) : connection ? (
-          <>
-            <p>🟢 <strong>{connection.status === "CONNECTED" ? "Conectado" : "Atenção necessária"}</strong></p>
-            <p><strong>Facebook:</strong> {connection.facebookPageName}</p>
-            <p><strong>Page ID:</strong> {connection.facebookPageId}</p>
-            <p>
-              <strong>Instagram:</strong>{" "}
-              {connection.instagramUsername
-                ? `@${connection.instagramUsername}`
-                : connection.instagramUserId || "Não conectado à Página"}
-            </p>
-            <p>
-              <strong>Conectado em:</strong>{" "}
-              {new Date(connection.connectedAt).toLocaleString("pt-BR")}
-            </p>
-            {connection.lastError && (
-              <p><strong>Último erro:</strong> {connection.lastError}</p>
-            )}
-
-            <button className="primary" onClick={connectMeta} disabled={connecting}>
-              {connecting ? "Abrindo Meta..." : "Reconectar Meta"}
-            </button>
-            <button className="secondary" onClick={disconnectMeta}>
-              Desconectar
-            </button>
-          </>
-        ) : (
-          <>
-            <p>🔴 Nenhuma conta Meta conectada para esta empresa.</p>
-            <button className="primary" onClick={connectMeta} disabled={connecting}>
-              {connecting ? "Abrindo Meta..." : "Conectar Facebook e Instagram"}
-            </button>
-          </>
+        {selectedCompany && (
+          <small>
+            As contas conectadas serão usadas somente nas
+            publicações de <strong>{selectedCompany.name}</strong>.
+          </small>
         )}
-      </div>
+      </section>
+
+      {message && (
+        <div className={`social-message ${messageType}`}>
+          <strong>
+            {messageType === "success" && "Concluído"}
+            {messageType === "error" && "Não foi possível concluir"}
+            {messageType === "warning" && "Atenção"}
+            {messageType === "info" && "Informação"}
+          </strong>
+
+          <p>{message}</p>
+        </div>
+      )}
+
+      {!companyId ? (
+        <section className="social-empty-state">
+          <span>🏢</span>
+          <h2>Selecione uma empresa</h2>
+          <p>
+            Escolha uma empresa acima para consultar ou configurar
+            suas redes sociais.
+          </p>
+        </section>
+      ) : loading ? (
+        <section className="social-empty-state">
+          <span className="social-loading-icon">⏳</span>
+          <h2>Carregando conexão</h2>
+          <p>Estamos verificando as contas vinculadas.</p>
+        </section>
+      ) : (
+        <>
+          <section className="social-status-summary">
+            <div>
+              <span>Status da empresa</span>
+
+              <strong>
+                {facebookConnected || instagramConnected
+                  ? "Redes parcialmente ou totalmente conectadas"
+                  : "Nenhuma rede conectada"}
+              </strong>
+            </div>
+
+            <span
+              className={`connection-status ${
+                facebookConnected || instagramConnected
+                  ? "connected"
+                  : "disconnected"
+              }`}
+            >
+              {facebookConnected || instagramConnected
+                ? "Conectado"
+                : "Desconectado"}
+            </span>
+          </section>
+
+          <section className="social-cards-grid">
+            <article className="social-network-card">
+              <div className="social-network-card-header">
+                <div className="social-network-brand">
+                  <span className="social-network-icon facebook">
+                    f
+                  </span>
+
+                  <div>
+                    <h2>Facebook</h2>
+                    <p>Página comercial da empresa</p>
+                  </div>
+                </div>
+
+                <span
+                  className={`connection-status ${
+                    facebookConnected
+                      ? "connected"
+                      : "disconnected"
+                  }`}
+                >
+                  {facebookConnected
+                    ? "Conectado"
+                    : "Não conectado"}
+                </span>
+              </div>
+
+              <div className="social-network-content">
+                {facebookConnected ? (
+                  <>
+                    <div className="social-information-row">
+                      <span>Página</span>
+                      <strong>
+                        {connection.facebookPageName ||
+                          "Página sem nome"}
+                      </strong>
+                    </div>
+
+                    <div className="social-information-row">
+                      <span>Identificação</span>
+                      <strong>
+                        {connection.facebookPageId}
+                      </strong>
+                    </div>
+
+                    <div className="social-information-row">
+                      <span>Última atualização</span>
+                      <strong>
+                        {formatDate(
+                          connection.updatedAt ||
+                            connection.connectedAt
+                        )}
+                      </strong>
+                    </div>
+                  </>
+                ) : (
+                  <div className="social-network-empty">
+                    <span>📘</span>
+                    <strong>Facebook não conectado</strong>
+                    <p>
+                      Conecte uma Página que você administra para
+                      permitir publicações.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </article>
+
+            <article className="social-network-card">
+              <div className="social-network-card-header">
+                <div className="social-network-brand">
+                  <span className="social-network-icon instagram">
+                    ◎
+                  </span>
+
+                  <div>
+                    <h2>Instagram</h2>
+                    <p>Conta profissional vinculada à Página</p>
+                  </div>
+                </div>
+
+                <span
+                  className={`connection-status ${
+                    instagramConnected
+                      ? "connected"
+                      : "disconnected"
+                  }`}
+                >
+                  {instagramConnected
+                    ? "Conectado"
+                    : "Não conectado"}
+                </span>
+              </div>
+
+              <div className="social-network-content">
+                {instagramConnected ? (
+                  <>
+                    <div className="social-information-row">
+                      <span>Perfil</span>
+                      <strong>
+                        {connection.instagramUsername
+                          ? `@${connection.instagramUsername}`
+                          : "Conta profissional"}
+                      </strong>
+                    </div>
+
+                    <div className="social-information-row">
+                      <span>Identificação</span>
+                      <strong>
+                        {connection.instagramUserId}
+                      </strong>
+                    </div>
+
+                    <div className="social-information-row">
+                      <span>Publicação automática</span>
+                      <strong>Disponível</strong>
+                    </div>
+                  </>
+                ) : (
+                  <div className="social-network-empty">
+                    <span>📸</span>
+                    <strong>Instagram não conectado</strong>
+                    <p>
+                      É necessária uma conta profissional vinculada
+                      à Página do Facebook.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </article>
+          </section>
+
+          {connection?.lastError && (
+            <section className="social-last-error">
+              <strong>Último erro registrado</strong>
+              <p>{connection.lastError}</p>
+            </section>
+          )}
+
+          <section className="social-actions-panel">
+            <div>
+              <h2>
+                {connection
+                  ? "Gerenciar conexão Meta"
+                  : "Conectar Facebook e Instagram"}
+              </h2>
+
+              <p>
+                A autorização será feita diretamente pela tela
+                oficial da Meta. O sistema não recebe a senha do
+                cliente.
+              </p>
+            </div>
+
+            <div className="social-actions">
+              <button
+                className="primary"
+                onClick={connectMeta}
+                disabled={connecting || disconnecting}
+              >
+                {connecting
+                  ? "Abrindo Meta..."
+                  : connection
+                    ? "Reconectar Meta"
+                    : "Conectar Facebook e Instagram"}
+              </button>
+
+              {connection && (
+                <button
+                  className="danger-button"
+                  onClick={disconnectMeta}
+                  disabled={connecting || disconnecting}
+                >
+                  {disconnecting
+                    ? "Desconectando..."
+                    : "Desconectar"}
+                </button>
+              )}
+            </div>
+          </section>
+        </>
+      )}
     </section>
   );
 }
