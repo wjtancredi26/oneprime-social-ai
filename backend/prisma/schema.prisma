@@ -8,24 +8,24 @@ datasource db {
 }
 
 model Company {
-  id         Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  name       String
-  cnpj       String?  @unique
-  segment    String?
-  logoUrl    String?
-  whatsapp   String?
-  instagram  String?
-  facebook   String?
-  website    String?
-  tone       String?
-  colors     String?
-  products   String?  @db.Text
-  brands     String?  @db.Text
-  ctas       String?  @db.Text
+  name      String
+  cnpj      String? @unique
+  segment   String?
+  logoUrl   String?
+  whatsapp  String?
+  instagram String?
+  facebook  String?
+  website   String?
+  tone      String?
+  colors    String?
+  products  String? @db.Text
+  brands    String? @db.Text
+  ctas      String? @db.Text
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @default(now()) @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   users             User[]
   posts             ScheduledPost[]
@@ -33,81 +33,83 @@ model Company {
 }
 
 model User {
-  id         Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  name       String
-  email      String   @unique
-  password   String
-  role       String   @default("USER")
+  name     String
+  email    String @unique
+  password String
+  role     String @default("USER")
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @default(now()) @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
-  companyId  Int?
-  company    Company? @relation(fields: [companyId], references: [id])
+  companyId Int?
+  company   Company? @relation(fields: [companyId], references: [id])
 
-  posts ScheduledPost[]
+  posts               ScheduledPost[]
+  passwordResetTokens PasswordResetToken[]
 }
-passwordResetTokens PasswordResetToken[]
+
 model ScheduledPost {
-  id           Int      @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
-  title        String?
-  prompt       String
-  caption      String   @db.Text
-  hashtags     String   @db.Text
-  imageIdea    String   @db.Text
-  cta          String   @db.Text
-  imageUrl     String?
+  title     String?
+  prompt    String
+  caption   String  @db.Text
+  hashtags  String  @db.Text
+  imageIdea String  @db.Text
+  cta       String  @db.Text
+  imageUrl  String?
 
-  network      String
-  scheduledAt  DateTime
-  status       String   @default("AGENDADO")
+  network     String
+  scheduledAt DateTime
+  status      String   @default("AGENDADO")
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @default(now()) @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   // Scheduler
-  publishedAt      DateTime?
-  attempts         Int      @default(0)
-  lastError        String?  @db.Text
+  publishedAt DateTime?
+  attempts    Int       @default(0)
+  lastError   String?   @db.Text
 
   // IDs das redes sociais
-  facebookPostId   String?
-  instagramPostId  String?
+  facebookPostId  String?
+  instagramPostId String?
 
-  userId       Int
-  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  companyId    Int?
-  company      Company? @relation(fields: [companyId], references: [id])
+  companyId Int?
+  company   Company? @relation(fields: [companyId], references: [id])
 }
 
 model SocialConnection {
-  id                        Int      @id @default(autoincrement())
-  companyId                 Int
-  provider                  String   @default("META")
+  id        Int    @id @default(autoincrement())
+  companyId Int
+  provider  String @default("META")
 
-  facebookPageId            String
-  facebookPageName          String
-  instagramUserId           String?
-  instagramUsername         String?
+  facebookPageId    String
+  facebookPageName  String
+  instagramUserId   String?
+  instagramUsername String?
 
-  pageAccessTokenEncrypted  String   @db.Text
-  userAccessTokenEncrypted  String?  @db.Text
-  tokenExpiresAt            DateTime?
+  pageAccessTokenEncrypted String    @db.Text
+  userAccessTokenEncrypted String?   @db.Text
+  tokenExpiresAt           DateTime?
 
-  status                    String   @default("CONNECTED")
-  lastError                 String?  @db.Text
-  connectedAt               DateTime @default(now())
-  createdAt                 DateTime @default(now())
-  updatedAt                 DateTime @updatedAt
+  status      String   @default("CONNECTED")
+  lastError   String?  @db.Text
+  connectedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, provider])
   @@index([companyId])
 }
+
 model PasswordResetToken {
   id        Int       @id @default(autoincrement())
   tokenHash String    @unique
