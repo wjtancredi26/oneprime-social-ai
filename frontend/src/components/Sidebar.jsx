@@ -1,4 +1,17 @@
 export default function Sidebar({ setView }) {
+  function handleLogout() {
+    const confirmed = window.confirm(
+      "Deseja realmente sair do OnePrime Social AI?"
+    );
+
+    if (!confirmed) return;
+
+    localStorage.removeItem("oneprime_token");
+    localStorage.removeItem("oneprime_user");
+
+    window.location.href = "/";
+  }
+
   return (
     <aside className="sidebar">
       <div className="logo">
@@ -35,18 +48,20 @@ export default function Sidebar({ setView }) {
         </button>
       </nav>
 
-      <div
-        style={{
-          marginTop: "auto",
-          padding: "18px",
-          fontSize: "12px",
-          opacity: 0.7,
-          textAlign: "center",
-        }}
-      >
-        OnePrime Social AI
-        <br />
-        <small>Versão 1.0 MVP</small>
+      <div className="sidebar-footer">
+        <button
+          type="button"
+          className="sidebar-logout-button"
+          onClick={handleLogout}
+        >
+          🚪 Sair do sistema
+        </button>
+
+        <div className="sidebar-version">
+          OnePrime Social AI
+          <br />
+          <small>Versão 1.0 MVP</small>
+        </div>
       </div>
     </aside>
   );

@@ -19,6 +19,7 @@
     "express": "^4.21.2",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.2.0",
+    "nodemailer": "^9.0.3",
     "openai": "^6.45.0",
     "prisma": "^5.22.0",
     "sharp": "^0.35.3",
