@@ -31,13 +31,19 @@ function createTransporter() {
     host: config.host,
     port: config.port,
 
-    // Porta 465 usa TLS desde o início.
+    // Porta 465 usa SSL direto.
+    // Porta 587 começa normal e sobe para TLS com STARTTLS.
     secure: config.port === 465,
+    requireTLS: config.port === 587,
 
     auth: {
       user: config.user,
       pass: config.password,
     },
+
+    connectionTimeout: 20_000,
+    greetingTimeout: 20_000,
+    socketTimeout: 30_000,
   });
 }
 
