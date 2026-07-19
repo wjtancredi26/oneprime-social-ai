@@ -1,7 +1,12 @@
 import { Resend } from "resend";
 
 function getResendClient() {
-  const apiKey = process.env.RESEND_API_KEY;
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+
+  console.log(
+    "RESEND_API_KEY:",
+    apiKey ? "CONFIGURADA" : "NÃO ENCONTRADA"
+  );
 
   if (!apiKey) {
     throw new Error(
@@ -12,8 +17,17 @@ function getResendClient() {
   return new Resend(apiKey);
 }
 
+function getEmailFrom() {
+  return (
+    process.env.EMAIL_FROM?.trim() ||
+    "OnePrime Social AI <onboarding@resend.dev>"
+  );
+}
+
 export async function verifyEmailConnection() {
-  if (!process.env.RESEND_API_KEY) {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+
+  if (!apiKey) {
     throw new Error(
       "RESEND_API_KEY não configurada no servidor."
     );
@@ -27,16 +41,31 @@ export async function sendPasswordResetEmail({
   userName,
   resetUrl,
 }) {
-  const resend = getResendClient();
+  if (!recipient) {
+    throw new Error(
+      "Destinatário do e-mail não informado."
+    );
+  }
 
-  const from =
-    process.env.EMAIL_FROM ||
-    "OnePrime Social AI <onboarding@resend.dev>";
+  if (!resetUrl) {
+    throw new Error(
+      "Link de redefinição de senha não informado."
+    );
+  }
+
+  const resend = getResendClient();
+  const from = getEmailFrom();
+
+  console.log("ENVIANDO E-MAIL DE RECUPERAÇÃO:", {
+    recipient,
+    from,
+  });
 
   const { data, error } = await resend.emails.send({
     from,
     to: [recipient],
-    subject: "Redefinição de senha — OnePrime Social AI",
+    subject:
+      "Redefinição de senha — OnePrime Social AI",
 
     text: `
 Olá, ${userName || "usuário"}.
@@ -55,8 +84,12 @@ Caso você não tenha solicitado essa alteração, ignore esta mensagem.
     html: `
       <div style="margin:0;padding:32px;background:#071020;font-family:Arial,sans-serif;color:#ffffff">
         <div style="max-width:580px;margin:auto;padding:32px;background:#111c32;border:1px solid #263654;border-radius:18px">
+
           <h1 style="margin:0 0 8px;font-size:25px">
-            OnePrime <span style="color:#38bdf8">Social AI</span>
+            OnePrime
+            <span style="color:#38bdf8">
+              Social AI
+            </span>
           </h1>
 
           <h2 style="margin-top:28px">
@@ -90,6 +123,7 @@ Caso você não tenha solicitado essa alteração, ignore esta mensagem.
             Caso você não tenha solicitado esta alteração, ignore
             esta mensagem.
           </p>
+
         </div>
       </div>
     `,
@@ -99,9 +133,21 @@ Caso você não tenha solicitado essa alteração, ignore esta mensagem.
     console.error("ERRO RESEND:", error);
 
     throw new Error(
-      error.message || "Erro ao enviar e-mail pelo Resend."
+      error.message ||
+        "Erro ao enviar e-mail pelo Resend."
     );
   }
+
+  if (!data?.id) {
+    throw new Error(
+      "O Resend não retornou a confirmação do envio."
+    );
+  }
+
+  console.log(
+    "E-MAIL DE RECUPERAÇÃO ENVIADO:",
+    data.id
+  );
 
   return data;
 }
