@@ -1,55 +1,23 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
-function getEmailConfig() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = process.env.SMTP_USER;
-  const password = process.env.SMTP_PASSWORD;
-  const from =
-    process.env.SMTP_FROM ||
-    `OnePrime Social AI <${user || "no-reply@oneprime.local"}>`;
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY;
 
-  if (!host || !user || !password) {
+  if (!apiKey) {
     throw new Error(
-      "Configuração de e-mail incompleta. Verifique SMTP_HOST, SMTP_USER e SMTP_PASSWORD."
+      "RESEND_API_KEY não configurada no servidor."
     );
   }
 
-  return {
-    host,
-    port,
-    user,
-    password,
-    from,
-  };
-}
-
-function createTransporter() {
-  const config = getEmailConfig();
-
-  return nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-
-    // Porta 465 usa SSL direto.
-    // Porta 587 começa normal e sobe para TLS com STARTTLS.
-    secure: config.port === 465,
-    requireTLS: config.port === 587,
-
-    auth: {
-      user: config.user,
-      pass: config.password,
-    },
-
-    connectionTimeout: 20_000,
-    greetingTimeout: 20_000,
-    socketTimeout: 30_000,
-  });
+  return new Resend(apiKey);
 }
 
 export async function verifyEmailConnection() {
-  const transporter = createTransporter();
-  await transporter.verify();
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error(
+      "RESEND_API_KEY não configurada no servidor."
+    );
+  }
 
   return true;
 }
@@ -59,12 +27,15 @@ export async function sendPasswordResetEmail({
   userName,
   resetUrl,
 }) {
-  const config = getEmailConfig();
-  const transporter = createTransporter();
+  const resend = getResendClient();
 
-  await transporter.sendMail({
-    from: config.from,
-    to: recipient,
+  const from =
+    process.env.EMAIL_FROM ||
+    "OnePrime Social AI <onboarding@resend.dev>";
+
+  const { data, error } = await resend.emails.send({
+    from,
+    to: [recipient],
     subject: "Redefinição de senha — OnePrime Social AI",
 
     text: `
@@ -72,13 +43,13 @@ Olá, ${userName || "usuário"}.
 
 Recebemos uma solicitação para redefinir sua senha do OnePrime Social AI.
 
-Abra este endereço para cadastrar uma nova senha:
+Abra o endereço abaixo para cadastrar uma nova senha:
 
 ${resetUrl}
 
-O link ficará disponível por 30 minutos.
+O link ficará disponível por 30 minutos e poderá ser usado somente uma vez.
 
-Caso você não tenha solicitado a redefinição, ignore esta mensagem.
+Caso você não tenha solicitado essa alteração, ignore esta mensagem.
 `.trim(),
 
     html: `
@@ -88,7 +59,9 @@ Caso você não tenha solicitado a redefinição, ignore esta mensagem.
             OnePrime <span style="color:#38bdf8">Social AI</span>
           </h1>
 
-          <h2 style="margin-top:28px">Redefinição de senha</h2>
+          <h2 style="margin-top:28px">
+            Redefinição de senha
+          </h2>
 
           <p style="line-height:1.6;color:#cbd5e1">
             Olá, ${userName || "usuário"}.
@@ -109,14 +82,26 @@ Caso você não tenha solicitado a redefinição, ignore esta mensagem.
           </p>
 
           <p style="line-height:1.6;color:#94a3b8;font-size:14px">
-            Este link ficará disponível por 30 minutos e poderá ser usado uma única vez.
+            Este link ficará disponível por 30 minutos e poderá ser
+            utilizado somente uma vez.
           </p>
 
           <p style="line-height:1.6;color:#94a3b8;font-size:14px">
-            Caso você não tenha solicitado esta alteração, ignore esta mensagem.
+            Caso você não tenha solicitado esta alteração, ignore
+            esta mensagem.
           </p>
         </div>
       </div>
     `,
   });
+
+  if (error) {
+    console.error("ERRO RESEND:", error);
+
+    throw new Error(
+      error.message || "Erro ao enviar e-mail pelo Resend."
+    );
+  }
+
+  return data;
 }
