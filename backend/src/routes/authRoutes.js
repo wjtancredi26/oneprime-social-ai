@@ -11,16 +11,39 @@ import {
   resetPassword,
 } from "../controllers/passwordResetController.js";
 
-import { authenticate } from "../middlewares/auth.js";
+import {
+  authenticate,
+  requireAdmin,
+} from "../middlewares/auth.js";
 
 const router = express.Router();
 
-router.post("/register", register);
+/*
+ * Rotas públicas
+ */
 router.post("/login", login);
+router.post(
+  "/forgot-password",
+  forgotPassword
+);
+router.post(
+  "/reset-password",
+  resetPassword
+);
 
-router.post("/forgot-password", forgotPassword);
-router.post("/reset-password", resetPassword);
-
+/*
+ * Rotas autenticadas
+ */
 router.get("/me", authenticate, me);
+
+/*
+ * Somente ADMIN pode criar usuários.
+ */
+router.post(
+  "/register",
+  authenticate,
+  requireAdmin,
+  register
+);
 
 export default router;
