@@ -1,7 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import { authenticate } from "../middlewares/auth.js";
-import { env, getMetaConfigurationErrors } from "../config/env.js";
+import { env } from "../config/env.js";
 import {
   disconnectMeta,
   getMetaConnection,
@@ -15,10 +15,10 @@ import {
 } from "../services/metaOAuthService.js";
 
 const router = express.Router();
-const GRAPH_VERSION = env.meta.graphVersion;
+const GRAPH_VERSION = process.env.META_GRAPH_VERSION || "v25.0";
 
 function buildFrontendRedirect(path = "/", params = {}) {
-  const frontendUrl = (env.frontendUrl || "http://localhost:5173/")
+  const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173")
     .split(",")[0]
     .trim()
     .replace(/\/$/, "");
@@ -64,7 +64,7 @@ async function graphGet(path, params = {}) {
 }
 
 async function fetchAllManagedPages(userAccessToken) {
-  const fields = "id,name,access_token,tasks,instagram_business_account{id,username}";
+  const fields = "id,name,access_token,tasks";
   let nextUrl = new URL(`https://graph.facebook.com/${GRAPH_VERSION}/me/accounts`);
   nextUrl.searchParams.set("fields", fields);
   nextUrl.searchParams.set("limit", "100");
@@ -108,18 +108,14 @@ router.get("/status", authenticate, async (req, res) => {
 
 router.post("/connect-url", authenticate, async (req, res) => {
   try {
-    const configurationErrors = getMetaConfigurationErrors();
-    if (configurationErrors.length > 0) {
-      console.error("Configuração Meta inválida:", configurationErrors);
+    const appId = process.env.META_APP_ID;
+    const redirectUri = process.env.META_REDIRECT_URI;
+    if (!appId || !redirectUri) {
       return res.status(500).json({
         success: false,
-        error: configurationErrors.join(" "),
-        code: "META_CONFIGURATION_INVALID",
+        error: "META_APP_ID ou META_REDIRECT_URI não configurado.",
       });
     }
-
-    const appId = env.meta.appId;
-    const redirectUri = env.meta.redirectUri;
 
     const companyId = await resolveCompanyId({
       user: req.user,
@@ -130,8 +126,6 @@ router.post("/connect-url", authenticate, async (req, res) => {
       "pages_show_list",
       "pages_read_engagement",
       "pages_manage_posts",
-      "instagram_basic",
-      "instagram_content_publish",
     ].join(",");
 
     const url = new URL(`https://www.facebook.com/${GRAPH_VERSION}/dialog/oauth`);
@@ -171,14 +165,12 @@ router.get("/callback", async (req, res) => {
     }
 
     const { companyId, userId } = verifyOAuthState(state);
-    const configurationErrors = getMetaConfigurationErrors();
-    if (configurationErrors.length > 0) {
-      throw new Error(configurationErrors.join(" "));
+    const appId = process.env.META_APP_ID;
+    const appSecret = process.env.META_APP_SECRET;
+    const redirectUri = process.env.META_REDIRECT_URI;
+    if (!appId || !appSecret || !redirectUri) {
+      throw new Error("Configuração OAuth da Meta incompleta no servidor.");
     }
-
-    const appId = env.meta.appId;
-    const appSecret = env.meta.appSecret;
-    const redirectUri = env.meta.redirectUri;
 
     const tokenData = await graphGet("oauth/access_token", {
       client_id: appId,
@@ -218,8 +210,6 @@ router.get("/callback", async (req, res) => {
       "pages_show_list",
       "pages_read_engagement",
       "pages_manage_posts",
-      "instagram_basic",
-      "instagram_content_publish",
     ];
     const missingPermissions = requiredPermissions.filter(
       (permission) => !grantedPermissions.has(permission)
@@ -231,6 +221,23 @@ router.get("/callback", async (req, res) => {
     }
 
     const pages = await fetchAllManagedPages(userAccessToken);
+
+    // A conexão inicial pede somente permissões de Página para evitar que
+    // aplicativos ainda sem o caso de uso do Instagram sejam bloqueados.
+    // Quando possível, tentamos descobrir o Instagram vinculado sem impedir
+    // a conexão do Facebook caso a Meta negue esse campo.
+    for (const page of pages) {
+      try {
+        const details = await graphGet(page.id, {
+          fields: "instagram_business_account{id,username}",
+          access_token: page.access_token,
+        });
+        page.instagram_business_account = details.instagram_business_account || null;
+      } catch (_instagramError) {
+        page.instagram_business_account = null;
+      }
+    }
+
     if (pages.length === 0) {
       throw new Error(
         "Nenhuma Página foi retornada pela Meta. Confirme que seu perfil possui acesso total à Página e que, em modo de desenvolvimento, seu perfil está cadastrado como administrador ou testador do aplicativo."
